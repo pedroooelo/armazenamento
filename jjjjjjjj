@@ -1,0 +1,150 @@
+import time
+import socket
+import threading
+import psutil
+import json
+
+# Função para lidar com cada cliente individualmente
+def handle_client(conn, addr, client_id):
+    print(f"\n[+] Nova conexão de {addr[0]}:{addr[1]} (Cliente {client_id})")
+
+    # Iniciar o cronômetro para calcular o tempo até o fechamento da conexão
+    start_time = time.time()  # Tempo de início da conexão
+
+    # IP da máquina servidor
+    local_ip = socket.gethostbyname(socket.gethostname())  # Pode ser modificado para um método mais robusto
+    print(f"Endereço IP local do servidor: {local_ip}")
+
+    # IP e porta do cliente
+    remote_ip, remote_port = addr
+    print(f"Endereço IP do cliente: {remote_ip}")
+    print(f"Porta de origem no cliente: {remote_port}")
+    print(f"Protocolo de transporte utilizado: TCP")
+
+    # Informações das interfaces de rede do servidor
+    print("\nInterfaces de rede e seus IPs:")
+    try:
+        for interface, addrs in psutil.net_if_addrs().items():
+            for addr in addrs:
+                if addr.family == socket.AF_INET:
+                    print(f"{interface} -> IP: {addr.address}")
+    except Exception as e:
+        print(f"Erro ao obter informações das interfaces de rede: {e}")
+
+    # Criando um pacote JSON personalizado para cada cliente
+    response = {
+        "type": "greeting",
+        "message": f"Olá, cliente {client_id}! Bem-vindo ao servidor.",
+        "status": "sucesso",
+        "server_ip": local_ip,
+        "client_ip": remote_ip
+    }
+
+    # Convertendo o pacote para JSON e enviando
+    conn.sendall(json.dumps(response, indent=4).encode())  # Usando indentação para melhorar a leitura
+
+    # Fechar conexão com o cliente
+    conn.close()
+
+    # Finalizar o cronômetro e calcular o tempo total de comunicação
+    end_time = time.time()  # Tempo final após o fechamento da conexão
+    connection_duration = end_time - start_time
+    print(f"[-] Conexão encerrada com {addr[0]}:{addr[1]} (Cliente {client_id})")
+    print(f"Tempo total de conexão do cliente {client_id}: {connection_duration:.4f} segundos")
+
+# Função para iniciar o servidor
+def start_server():
+    host = "0.0.0.0"  # Aceita conexões em todas as interfaces
+    port = 12345       # Porta do servidor
+
+    # Criando o socket TCP
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    try:
+        server_socket.bind((host, port))
+        server_socket.listen(5)  # Permite até 5 conexões simultâneas
+        print(f"Servidor aguardando conexões em {host}:{port}...")
+
+        client_id = 1
+        while True:
+            start_accept_time = time.time()  # Tempo de início da aceitação da conexão
+            conn, addr = server_socket.accept()  # Aceita novas conexões
+            end_accept_time = time.time()  # Tempo final após a aceitação da conexão
+            accept_duration = end_accept_time - start_accept_time
+            print(f"Tempo de aceitação de conexão: {accept_duration:.4f} segundos")
+
+            # Iniciar thread para lidar com o cliente
+            client_thread = threading.Thread(target=handle_client, args=(conn, addr, client_id))
+            client_thread.start()  # Inicia uma thread para cada cliente
+            client_id += 1  # Incrementa o id para o próximo cliente
+
+    except Exception as e:
+        print(f"Erro ao iniciar o servidor: {e}")
+    finally:
+        server_socket.close()
+
+# Função para iniciar o cliente
+def start_client(client_id):
+    host = "127.0.0.1"  # Endereço do servidor (localhost)
+    port = 12345         # Porta do servidor
+
+    # Criando o socket TCP
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    try:
+        # Medir o tempo de conexão
+        start_connection_time = time.time()
+        client_socket.connect((host, port))  # Conectar ao servidor
+        end_connection_time = time.time()
+
+        connection_duration = end_connection_time - start_connection_time
+        print(f"\n[Cliente {client_id}] Tempo de conexão: {connection_duration:.4f} segundos")
+
+        client_ip = socket.gethostbyname(socket.gethostname())
+        local_port = client_socket.getsockname()[1]
+
+        print(f"[Cliente {client_id}] Endereço IP do cliente: {client_ip}")
+        print(f"[Cliente {client_id}] Porta local utilizada: {local_port}")
+
+        # Receber mensagem do servidor
+        message = client_socket.recv(1024)
+        print(f"[Cliente {client_id}] Mensagem do servidor: {message.decode()}")
+
+        # Medir o tempo de desconexão
+        start_disconnect_time = time.time()
+        client_socket.close()
+        end_disconnect_time = time.time()
+
+        disconnect_duration = end_disconnect_time - start_disconnect_time
+        print(f"[Cliente {client_id}] Tempo de desconexão: {disconnect_duration:.4f} segundos")
+
+    except ConnectionRefusedError:
+        print("[Erro] Não foi possível conectar ao servidor!")
+
+    finally:
+        client_socket.close()
+
+# Função para gerenciar pacotes de threads para os clientes
+def start_client_package(number_of_clients=5):
+    client_threads = []
+    
+    for client_id in range(1, number_of_clients + 1):
+        t = threading.Thread(target=start_client, args=(client_id,))
+        t.start()
+        client_threads.append(t)
+
+    # Aguardar todas as threads dos clientes terminarem antes de encerrar o programa
+    for t in client_threads:
+        t.join()
+
+    print("Todos os clientes finalizaram.")
+
+if __name__ == "__main__":
+    # Iniciar servidor em uma thread separada
+    server_thread = threading.Thread(target=start_server)
+    server_thread.start()
+
+    # Criar e aguardar pacotes de clientes terminarem
+    start_client_package(number_of_clients=5)  # Pacote de 5 clientes
+
+    print("Todos os clientes finalizaram.")

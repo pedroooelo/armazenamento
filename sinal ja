@@ -1,0 +1,131 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.signal import butter, lfilter, freqz
+
+# Definir a função de amplificação (LNA)
+def amplifier(signal, gain=20):
+    """
+    Função para simular um amplificador de RF (LNA).
+    O ganho é dado em dB.
+    """
+    return signal * 10**(gain / 20)
+
+# Definir a função de um filtro passa-baixas
+def butter_lowpass(cutoff, fs, order=5):
+    """
+    Cria um filtro passa-baixas Butterworth.
+    :param cutoff: Frequência de corte em Hz
+    :param fs: Taxa de amostragem em Hz
+    :param order: Ordem do filtro
+    :return: Coeficientes do filtro (b, a)
+    """
+    nyquist = 0.5 * fs
+    normal_cutoff = cutoff / nyquist
+    b, a = butter(order, normal_cutoff, btype='low', analog=False)
+    return b, a
+
+def apply_lowpass_filter(data, cutoff, fs, order=5):
+    """
+    Aplica o filtro passa-baixas no sinal.
+    :param data: Sinal de entrada
+    :param cutoff: Frequência de corte em Hz
+    :param fs: Taxa de amostragem em Hz
+    :param order: Ordem do filtro
+    :return: Sinal filtrado
+    """
+    b, a = butter_lowpass(cutoff, fs, order)
+    return lfilter(b, a, data)
+
+# Definir a função para simular um atenuador
+def attenuator(signal, attenuation_db=10):
+    """
+    Função para simular um atenuador.
+    O valor de atenuação é dado em dB.
+    """
+    return signal * 10**(-attenuation_db / 20)
+
+# Gerar um sinal de RF para simulação
+def generate_signal(frequency, fs, duration):
+    """
+    Gera um sinal senoidal de uma determinada frequência.
+    :param frequency: Frequência do sinal (em Hz)
+    :param fs: Taxa de amostragem (em Hz)
+    :param duration: Duração do sinal (em segundos)
+    :return: Sinal gerado
+    """
+    t = np.linspace(0, duration, int(fs * duration), endpoint=False)
+    signal = np.sin(2 * np.pi * frequency * t)
+    return signal, t
+
+# Análise de resposta de frequência (utiliza a Transformada Rápida de Fourier)
+def plot_frequency_response(signal, fs):
+    """
+    Exibe a resposta de frequência de um sinal.
+    """
+    n = len(signal)
+    freqs = np.fft.fftfreq(n, d=1/fs)
+    fft_values = np.fft.fft(signal)
+
+    plt.figure()
+    plt.plot(freqs[:n // 2], np.abs(fft_values)[:n // 2])
+    plt.title("Resposta de Frequência")
+    plt.xlabel("Frequência (Hz)")
+    plt.ylabel("Magnitude")
+    plt.grid(True)
+    plt.show()
+
+# Função principal para simular o sistema de RF
+def rf_simulation():
+    fs = 1000  # Taxa de amostragem (Hz
+    duration = 1  # Duração do sinal (segundos)
+    input_freq = 50  # Frequência de entrada do sinal (Hz)
+
+    # Gerar sinal de RF
+    signal, t = generate_signal(input_freq, fs, duration)
+
+    # Exibir o sinal de entrada
+    plt.figure()
+    plt.plot(t, signal)
+    plt.title("Sinal de Entrada")
+    plt.xlabel("Tempo (s)")
+    plt.ylabel("Amplitude")
+    plt.grid(True)
+    plt.show()
+
+    # Aplicar amplificador (LNA)
+    amplified_signal = amplifier(signal, gain=30)
+    plt.figure()
+    plt.plot(t, amplified_signal)
+    plt.title("Sinal Amplificado")
+    plt.xlabel("Tempo (s)")
+    plt.ylabel("Amplitude")
+    plt.grid(True)
+    plt.show()
+
+    # Aplicar filtro passa-baixas
+    cutoff_frequency = 100  # Frequência de corte do filtro (Hz)
+    filtered_signal = apply_lowpass_filter(amplified_signal, cutoff_frequency, fs)
+    plt.figure()
+    plt.plot(t, filtered_signal)
+    plt.title("Sinal Após Filtro Passa-Baixas")
+    plt.xlabel("Tempo (s)")
+    plt.ylabel("Amplitude")
+    plt.grid(True)
+    plt.show()
+
+    # Aplicar atenuador
+    attenuated_signal = attenuator(filtered_signal, attenuation_db=15)
+    plt.figure()
+    plt.plot(t, attenuated_signal)
+    plt.title("Sinal Após Atenuação")
+    plt.xlabel("Tempo (s)")
+    plt.ylabel("Amplitude")
+    plt.grid(True)
+    plt.show()
+
+    # Analisar a resposta de frequência do sinal final
+    plot_frequency_response(attenuated_signal, fs)
+    print("Simulação concluída!")
+
+if __name__ == "__main__":
+   rf_simulation()  # Chama a função para executar a simulação
